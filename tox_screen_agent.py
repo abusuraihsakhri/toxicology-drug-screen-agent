@@ -91,7 +91,8 @@ class PrescriptionReconcilerAgent:
     """Specialized Sub-Agent 2 for toxicology-drug-screen-agent"""
     def evaluate(self, payload: Dict[str, Any]) -> List[AgentAlert]:
         alerts = []
-        is_critical = bool(payload.get("critical_flag", False))
+        raw_critical = payload.get("critical_flag", payload.get("is_stat", False))
+        is_critical = raw_critical if isinstance(raw_critical, bool) else str(raw_critical).strip().lower() in ("true", "1", "yes")
         val2 = float(payload.get("metric_secondary", 5.0))
         if not math.isfinite(val2):
             raise ValueError("metric_secondary must be finite")
@@ -113,7 +114,7 @@ class LCMSConfirmatoryPlannerAgent:
     """Specialized Sub-Agent 3 for toxicology-drug-screen-agent"""
     def evaluate(self, payload: Dict[str, Any]) -> List[AgentAlert]:
         alerts = []
-        status_text = str(payload.get("status_text", "NORMAL")).upper()
+        status_text = str(payload.get("status_text", payload.get("status_flag", "NORMAL"))).upper()
         if "DISCORDANT" in status_text or "SUSPICIOUS" in status_text:
             alerts.append(
                 AgentAlert(
@@ -181,7 +182,7 @@ coordinator = ToxCoordinator()
 def create_app():
     try:
         from fastapi import FastAPI
-        from pydantic import BaseModel
+        from pydantic import BaseModel, Field
 
         app = FastAPI(
             title="ToxScreen Sentinel: Immunoassay Cross-Reactivity & Confirmatory LC-MS/MS Agent",
@@ -191,8 +192,8 @@ def create_app():
 
         class AuditRequest(BaseModel):
             case_id: Optional[str] = None
-            metric_primary: float = 15.0
-            metric_secondary: float = 5.0
+            metric_primary: float = Field(default=15.0, allow_inf_nan=False)
+            metric_secondary: float = Field(default=5.0, allow_inf_nan=False)
             critical_flag: bool = False
             status_text: str = "NORMAL"
 
