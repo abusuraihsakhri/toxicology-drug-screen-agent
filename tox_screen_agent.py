@@ -12,6 +12,7 @@ import argparse
 import csv
 import datetime
 import json
+import math
 import sys
 import uuid
 from typing import Dict, Any, List, Optional
@@ -70,6 +71,8 @@ class ImmunoassayCrossReactivityAgent:
     def evaluate(self, payload: Dict[str, Any]) -> List[AgentAlert]:
         alerts = []
         val1 = float(payload.get("metric_primary", 15.0))
+        if not math.isfinite(val1):
+            raise ValueError("metric_primary must be finite")
         if val1 > 20.0:
             alerts.append(
                 AgentAlert(
@@ -88,8 +91,11 @@ class PrescriptionReconcilerAgent:
     """Specialized Sub-Agent 2 for toxicology-drug-screen-agent"""
     def evaluate(self, payload: Dict[str, Any]) -> List[AgentAlert]:
         alerts = []
-        is_critical = bool(payload.get("critical_flag", False))
+        raw_critical = payload.get("critical_flag", payload.get("is_stat", False))
+        is_critical = raw_critical if isinstance(raw_critical, bool) else str(raw_critical).strip().lower() in ("true", "1", "yes")
         val2 = float(payload.get("metric_secondary", 5.0))
+        if not math.isfinite(val2):
+            raise ValueError("metric_secondary must be finite")
         if is_critical or val2 > 12.0:
             alerts.append(
                 AgentAlert(
@@ -108,7 +114,7 @@ class LCMSConfirmatoryPlannerAgent:
     """Specialized Sub-Agent 3 for toxicology-drug-screen-agent"""
     def evaluate(self, payload: Dict[str, Any]) -> List[AgentAlert]:
         alerts = []
-        status_text = str(payload.get("status_text", "NORMAL")).upper()
+        status_text = str(payload.get("status_text", payload.get("status_flag", "NORMAL"))).upper()
         if "DISCORDANT" in status_text or "SUSPICIOUS" in status_text:
             alerts.append(
                 AgentAlert(
@@ -176,7 +182,7 @@ coordinator = ToxCoordinator()
 def create_app():
     try:
         from fastapi import FastAPI
-        from pydantic import BaseModel
+        from pydantic import BaseModel, Field
 
         app = FastAPI(
             title="ToxScreen Sentinel: Immunoassay Cross-Reactivity & Confirmatory LC-MS/MS Agent",
@@ -186,8 +192,8 @@ def create_app():
 
         class AuditRequest(BaseModel):
             case_id: Optional[str] = None
-            metric_primary: float = 15.0
-            metric_secondary: float = 5.0
+            metric_primary: float = Field(default=15.0, allow_inf_nan=False)
+            metric_secondary: float = Field(default=5.0, allow_inf_nan=False)
             critical_flag: bool = False
             status_text: str = "NORMAL"
 
@@ -247,6 +253,9 @@ def main(argv=None):
             "critical_flag": args.critical,
             "status_text": args.status,
         }
+        if not all(math.isfinite(value) for value in (args.primary, args.secondary)):
+            print("Error: numeric values must be finite", file=sys.stderr)
+            return 1
         dossier = coordinator.audit_case(payload)
         print("=" * 80)
         print(f"  TOXSCREEN SENTINEL: IMMUNOASSAY CROSS-REACTIVITY & CONFIRMATORY LC-MS/MS AGENT")
@@ -267,13 +276,13 @@ def main(argv=None):
 
     if args.command == "batch":
         import os as _os
-        _cwd = _os.getcwd()
+        _cwd = _os.path.realpath(_os.getcwd())
         _input_path = _os.path.realpath(_os.path.join(_cwd, args.input))
         _output_path = _os.path.realpath(_os.path.join(_cwd, args.output))
-        if not _input_path.startswith(_os.path.realpath(_cwd)):
+        if _os.path.commonpath([_cwd, _input_path]) != _cwd:
             print(f"Error: Input path '{args.input}' escapes the working directory (path traversal blocked).", file=sys.stderr)
             return 1
-        if not _output_path.startswith(_os.path.realpath(_cwd)):
+        if _os.path.commonpath([_cwd, _output_path]) != _cwd:
             print(f"Error: Output path '{args.output}' escapes the working directory (path traversal blocked).", file=sys.stderr)
             return 1
 
@@ -292,7 +301,7 @@ def main(argv=None):
             print(f"Error reading input file: {e}", file=sys.stderr)
             return 1
 
-        out_fields = fieldnames + ["overall_status", "total_alerts", "critical_count", "consensus_summary"]
+        out_fields = list(dict.fromkeys(fieldnames + ["overall_status", "total_alerts", "critical_count", "consensus_summary"])
         out_rows = []
         for r in rows:
             try:

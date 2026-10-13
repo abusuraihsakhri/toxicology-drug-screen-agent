@@ -4,6 +4,7 @@ Command-Line Interface for ToxScreen Sentinel: Immunoassay Cross-Reactivity & Co
 import argparse
 import csv
 import json
+import math
 import sys
 from .models import ClinicalCasePayload
 from .agents import ToxCoordinator
@@ -48,6 +49,9 @@ def main(argv=None):
             status_flag=args.status,
             is_stat=args.stat,
         )
+        if not all(math.isfinite(value) for value in (args.primary, args.secondary)):
+            print("Error: numeric values must be finite", file=sys.stderr)
+            return 1
         dossier = coordinator.process_case(case)
         print("=" * 80)
         print(f"  TOXSCREEN SENTINEL: IMMUNOASSAY CROSS-REACTIVITY & CONFIRMATORY LC-MS/MS AGENT")
@@ -69,13 +73,13 @@ def main(argv=None):
 
     if args.command == "batch":
         import os as _os
-        _cwd = _os.getcwd()
+        _cwd = _os.path.realpath(_os.getcwd())
         _input_path = _os.path.realpath(_os.path.join(_cwd, args.input))
         _output_path = _os.path.realpath(_os.path.join(_cwd, args.output))
-        if not _input_path.startswith(_os.path.realpath(_cwd)):
+        if _os.path.commonpath([_cwd, _input_path]) != _cwd:
             print(f"Error: Input path '{args.input}' escapes the working directory (path traversal blocked).", file=sys.stderr)
             return 1
-        if not _output_path.startswith(_os.path.realpath(_cwd)):
+        if _os.path.commonpath([_cwd, _output_path]) != _cwd:
             print(f"Error: Output path '{args.output}' escapes the working directory (path traversal blocked).", file=sys.stderr)
             return 1
 
@@ -94,7 +98,7 @@ def main(argv=None):
             print(f"Error reading input file: {e}", file=sys.stderr)
             return 1
 
-        out_fields = fieldnames + ["overall_status", "total_alerts", "stat_critical_alerts", "consensus_summary"]
+        out_fields = list(dict.fromkeys(fieldnames + ["overall_status", "total_alerts", "stat_critical_alerts", "consensus_summary"])
         out_rows = []
         for r in rows:
             try:
@@ -106,6 +110,8 @@ def main(argv=None):
                     status_flag=r.get("status_flag", r.get("status_text", "NORMAL")),
                     is_stat=str(r.get("is_stat", r.get("critical_flag", "False"))).lower() in ("true", "1", "yes"),
                 )
+                if not all(math.isfinite(value) for value in (case.primary_metric, case.secondary_metric)):
+                    raise ValueError("numeric values must be finite")
                 dossier = coordinator.process_case(case)
             except (ValueError, TypeError, KeyError) as e:
                 print(f"Warning: Skipping row due to invalid data: {e}", file=sys.stderr)
