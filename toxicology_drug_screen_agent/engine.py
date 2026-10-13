@@ -18,8 +18,8 @@ class ClinicalDomainEngine:
         if value > cls.PRIMARY_BASELINE_LIMIT:
             return {
                 "title": "Primary Metric Threshold Exceeded",
-                "finding": f"Observed value ({value:.2f}) exceeds AACT / EAPCCT Poisoning Consensus clinical baseline limit ({cls.PRIMARY_BASELINE_LIMIT:.1f}).",
-                "recommendation": "Perform immediate secondary verification and calibration review.",
+                "finding": f"Observed value ({value:.2f}) exceeds the demonstration software threshold ({cls.PRIMARY_BASELINE_LIMIT:.1f}).",
+                "recommendation": "Illustrative rule only; follow laboratory-validated procedures.",
             }
         return None
 
@@ -29,7 +29,7 @@ class ClinicalDomainEngine:
             return {
                 "title": "STAT Kinetic Escalation Triggered",
                 "finding": f"Kinetic parameter ({value:.2f}) with STAT={is_stat} requires prioritized supervision.",
-                "recommendation": "Activate closed-loop verbal clinician notification protocol per Joint Commission standards.",
+                "recommendation": "Illustrative rule only; not a basis for clinical escalation.",
             }
         return None
 
@@ -40,6 +40,6 @@ class ClinicalDomainEngine:
             return {
                 "title": "Phenotypic / Biomarker Discordance Identified",
                 "finding": f"Status flag '{status_flag}' indicates divergence from standard diagnostic concordance.",
-                "recommendation": f"Order reflex confirmatory testing per AACT / EAPCCT Poisoning Consensus clinical recommendations.",
+                "recommendation": f"Consider the laboratory's validated confirmatory testing procedures.",
             }
         return None
