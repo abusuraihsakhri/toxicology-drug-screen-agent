@@ -4,6 +4,7 @@ Command Line Interface for Toxicology Drug Screen Agent.
 import argparse
 import csv
 import json
+import math
 import sys
 from agents.models import SystemTaskPayload
 from agents.supervisor import SystemSupervisor
@@ -47,7 +48,7 @@ def main(argv=None):
     if args.command == "audit":
         # Validate numeric inputs are finite
         for _name, _val in [("primary", args.primary), ("secondary", args.secondary)]:
-            if not isinstance(_val, (int, float)) or _val != _val:  # NaN check
+            if not isinstance(_val, (int, float)) or not math.isfinite(_val):
                 print(f"Error: --{_name} must be a finite number, got {_val!r}", file=sys.stderr)
                 return 1
         payload = SystemTaskPayload(
@@ -87,13 +88,13 @@ def main(argv=None):
     if args.command == "batch":
         # Path traversal protection: validate input/output paths
         import os as _os
-        _cwd = _os.getcwd()
+        _cwd = _os.path.realpath(_os.getcwd())
         _input_path = _os.path.realpath(_os.path.join(_cwd, args.input))
         _output_path = _os.path.realpath(_os.path.join(_cwd, args.output))
-        if not _input_path.startswith(_os.path.realpath(_cwd)):
+        if _os.path.commonpath([_cwd, _input_path]) != _cwd:
             print(f"Error: Input path '{args.input}' escapes the working directory (path traversal blocked).", file=sys.stderr)
             return 1
-        if not _output_path.startswith(_os.path.realpath(_cwd)):
+        if _os.path.commonpath([_cwd, _output_path]) != _cwd:
             print(f"Error: Output path '{args.output}' escapes the working directory (path traversal blocked).", file=sys.stderr)
             return 1
 
@@ -112,7 +113,7 @@ def main(argv=None):
             print(f"Error reading input file: {e}", file=sys.stderr)
             return 1
 
-        out_fields = fieldnames + ["overall_urgency", "integrity_status", "total_alerts", "audit_hash"]
+        out_fields = list(dict.fromkeys(fieldnames + ["overall_urgency", "integrity_status", "total_alerts", "audit_hash"])
         out_rows = []
         for r in rows:
             try:
